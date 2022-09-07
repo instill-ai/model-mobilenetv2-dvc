@@ -1,7 +1,7 @@
 # Adapted from https://github.com/NVIDIA/triton-inference-server/blob/master/docs/examples/ensemble_model_repository/preprocess_resnet50_ensemble/config.pbtxt
 name: "mobilenetv2"
 platform: "ensemble"
-max_batch_size: 1024
+max_batch_size: 16
 input [
   {
     name: "input"
