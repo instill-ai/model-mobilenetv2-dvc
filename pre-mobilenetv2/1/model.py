@@ -71,8 +71,8 @@ class TritonPythonModel(object):
                 pil_img = Image.open(io.BytesIO(img.astype(bytes)))
                 image = np.array(pil_img)
                 if len(image.shape) == 2:  # gray image
-                    image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-                np_tensor = self.tf(Image.fromarray(image)).numpy()
+                    image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+                np_tensor = self.tf(Image.fromarray(image, mode='RGB')).numpy()
                 batch_out.append(np_tensor)
 
             batch_out = np.asarray(batch_out)
