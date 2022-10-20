@@ -4,6 +4,7 @@ import json
 
 from typing import List
 from PIL import Image
+import cv2
 
 from triton_python_backend_utils import Tensor, InferenceResponse, \
     get_input_tensor_by_name, InferenceRequest
@@ -68,7 +69,10 @@ class TritonPythonModel(object):
             batch_out = []
             for img in batch_in:  # img is shape (1,)
                 pil_img = Image.open(io.BytesIO(img.astype(bytes)))
-                np_tensor = self.tf(pil_img).numpy()
+                image = np.array(pil_img)
+                if len(image.shape) == 2:  # gray image
+                    image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+                np_tensor = self.tf(Image.fromarray(image)).numpy()
                 batch_out.append(np_tensor)
 
             batch_out = np.asarray(batch_out)
