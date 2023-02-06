@@ -6,8 +6,7 @@ from typing import List
 from PIL import Image
 import cv2
 
-from triton_python_backend_utils import Tensor, InferenceResponse, \
-    get_input_tensor_by_name, InferenceRequest
+from c_python_backend_utils import Tensor, InferenceResponse, InferenceRequest
 
 import torchvision.transforms as transforms
 
