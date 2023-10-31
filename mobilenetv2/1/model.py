@@ -27,19 +27,6 @@ from ray_pb2 import (
 )
 
 
-class Task(Enum):
-    TASK_CLASSIFICATION = 1
-    TASK_DETECTION = 2
-    TASK_KEYPOINT = 3
-    TASK_OCR = 4
-    TASK_INSTANCE_SEGMENTATION = 5
-    TASK_SEMANTIC_SEGMENTATION = 6
-    TASK_TEXT_TO_IMAGE = 7
-    TASK_TEXT_GENERATION = 8
-    TASK_IMAGE_TO_IMAGE = 9
-    TASK_SPEECH_RECOGNITION = 10
-
-
 class DataType(Enum):
     TYPE_BOOL = 1
     TYPE_UINT8 = 2
@@ -232,24 +219,23 @@ class ClassificationModel:
         )
 
 
-def deploy_onnx_model(task: str, num_cpus: str, num_replicas: str, model_path: str):
-    if task == Task.TASK_CLASSIFICATION.name:
-        c_app = ClassificationModel.options(
-            name=model_path.split("/")[5],
-            ray_actor_options={
-                "num_cpus": float(num_cpus),
-            },
-            num_replicas=int(num_replicas),
-        ).bind(model_path)
-        model_path = model_path.split("/")[3]
-        serve.run(
-            c_app,
-            name="_".join(model_path.split("#")[:2]),
-            route_prefix=f'/{model_path.split("#")[3]}',
-        )
+def deploy_model(num_cpus: str, num_replicas: str, model_path: str):
+    c_app = ClassificationModel.options(
+        name=model_path.split("/")[5],
+        ray_actor_options={
+            "num_cpus": float(num_cpus),
+        },
+        num_replicas=int(num_replicas),
+    ).bind(model_path)
+    model_path = model_path.split("/")[3]
+    serve.run(
+        c_app,
+        name="_".join(model_path.split("#")[:2]),
+        route_prefix=f'/{model_path.split("#")[3]}',
+    )
 
 
-def undeploy_onnx_model(model_path: str):
+def undeploy_model(model_path: str):
     model_path = model_path.split("/")[3]
     serve.delete("_".join(model_path.split("#")[:2]))
 
@@ -260,7 +246,6 @@ if __name__ == "__main__":
         "--func", required=True, choices=["deploy", "undeploy"], help="deploy/undeploy"
     )
     parser.add_argument("--model", required=True, help="model path ofr the deployment")
-    parser.add_argument("--task", default="TASK_UNSPECIFIED", help="task")
     parser.add_argument("--cpus", default="0.2", help="num of cpus for this deployment")
     parser.add_argument(
         "--replicas", default="1", help="num of replicas for this deployment"
@@ -268,6 +253,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.func == "deploy":
-        deploy_onnx_model(args.task, args.cpus, args.replicas, args.model)
+        deploy_model(args.cpus, args.replicas, args.model)
     elif args.func == "undeploy":
-        undeploy_onnx_model(args.model)
+        undeploy_model(args.model)
