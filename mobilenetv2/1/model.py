@@ -1,20 +1,22 @@
 import io
-import logging
-import argparse
-import numpy as np
-import struct
+from typing import List
 import ray
 import torch
 import requests
 
-from enum import Enum
+import numpy as np
+import onnxruntime as ort
 from torchvision import transforms
 from PIL import Image
-from typing import List
-
-ray.init(address="ray://ray_server:10001")
-
-from ray import serve
+from instill.configuration import CORE_RAY_ADDRESS
+from instill.helpers.ray_helper import (
+    DataType,
+    serialize_byte_tensor,
+    deserialize_bytes_tensor,
+    deploy_decorator,
+    undeploy_decorator,
+    entry,
+)
 
 from ray_pb2 import (
     ModelReadyRequest,
@@ -26,104 +28,14 @@ from ray_pb2 import (
     InferTensor,
 )
 
-
-class DataType(Enum):
-    TYPE_BOOL = 1
-    TYPE_UINT8 = 2
-    TYPE_UINT16 = 3
-    TYPE_UINT32 = 4
-    TYPE_UINT64 = 5
-    TYPE_INT8 = 6
-    TYPE_INT16 = 7
-    TYPE_INT32 = 8
-    TYPE_INT64 = 9
-    TYPE_FP16 = 10
-    TYPE_FP32 = 11
-    TYPE_FP64 = 12
-    TYPE_STRING = 13
-
-
-def serialize_byte_tensor(input_tensor):
-    """
-    Serializes a bytes tensor into a flat numpy array of length prepended
-    bytes. The numpy array should use dtype of np.object_. For np.bytes_,
-    numpy will remove trailing zeros at the end of byte sequence and because
-    of this it should be avoided.
-    Parameters
-    ----------
-    input_tensor : np.array
-        The bytes tensor to serialize.
-    Returns
-    -------
-    serialized_bytes_tensor : np.array
-        The 1-D numpy array of type uint8 containing the serialized bytes in 'C' order.
-    Raises
-    ------
-    InferenceServerException
-        If unable to serialize the given tensor.
-    """
-
-    if input_tensor.size == 0:
-        return ()
-
-    # If the input is a tensor of string/bytes objects, then must flatten those
-    # into a 1-dimensional array containing the 4-byte byte size followed by the
-    # actual element bytes. All elements are concatenated together in "C" order.
-    if (input_tensor.dtype == np.object_) or (input_tensor.dtype.type == np.bytes_):
-        flattened_ls = []
-        for obj in np.nditer(input_tensor, flags=["refs_ok"], order="C"):
-            # If directly passing bytes to BYTES type,
-            # don't convert it to str as Python will encode the
-            # bytes which may distort the meaning
-            if input_tensor.dtype == np.object_:
-                if isinstance(obj.item(), bytes):
-                    s = obj.item()
-                else:
-                    s = str(obj.item()).encode("utf-8")
-            else:
-                s = obj.item()
-            flattened_ls.append(struct.pack("<I", len(s)))
-            flattened_ls.append(s)
-        flattened = b"".join(flattened_ls)
-        return flattened
-    return None
-
-
-def deserialize_bytes_tensor(encoded_tensor):
-    """
-    Deserializes an encoded bytes tensor into an
-    numpy array of dtype of python objects
-
-    Parameters
-    ----------
-    encoded_tensor : bytes
-        The encoded bytes tensor where each element
-        has its length in first 4 bytes followed by
-        the content
-    Returns
-    -------
-    string_tensor : np.array
-        The 1-D numpy array of type object containing the
-        deserialized bytes in 'C' order.
-
-    """
-    strs = []
-    offset = 0
-    val_buf = encoded_tensor
-    while offset < len(val_buf):
-        l = struct.unpack_from("<I", val_buf, offset)[0]
-        offset += 4
-        sb = struct.unpack_from("<{}s".format(l), val_buf, offset)[0]
-        offset += l
-        strs.append(sb)
-    return np.array(strs, dtype=bytes)
+ray.init(address=CORE_RAY_ADDRESS)
+# this import must come after `ray.init()`
+from ray import serve
 
 
 @serve.deployment()
-class ClassificationModel:
+class MobileNet:
     def __init__(self, model_path: str):
-        import onnxruntime as ort
-
         self.application_name = "_".join(model_path.split("/")[3:5])
         self.deployement_name = model_path.split("/")[4]
         self.categories = self._image_labels()
@@ -219,40 +131,37 @@ class ClassificationModel:
         )
 
 
-def deploy_model(num_cpus: str, num_replicas: str, model_path: str):
-    c_app = ClassificationModel.options(
-        name=model_path.split("/")[5],
+@deploy_decorator
+def deploy_model(
+    num_cpus: str,
+    num_replicas: str,
+    application_name: str,
+    model_path: str,
+    model_name: str,
+    route_prefix: str,
+):
+    c_app = MobileNet.options(
+        name=application_name,
         ray_actor_options={
-            "num_cpus": float(num_cpus),
+            "num_cpus": num_cpus,
         },
-        num_replicas=int(num_replicas),
+        num_replicas=num_replicas,
     ).bind(model_path)
-    model_path = model_path.split("/")[3]
-    serve.run(
-        c_app,
-        name="_".join(model_path.split("#")[:2]),
-        route_prefix=f'/{model_path.split("#")[3]}',
-    )
+
+    serve.run(c_app, name=model_name, route_prefix=route_prefix)
 
 
-def undeploy_model(model_path: str):
-    model_path = model_path.split("/")[3]
-    serve.delete("_".join(model_path.split("#")[:2]))
+@undeploy_decorator
+def undeploy_model(model_name: str):
+    serve.delete(model_name)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--func", required=True, choices=["deploy", "undeploy"], help="deploy/undeploy"
-    )
-    parser.add_argument("--model", required=True, help="model path ofr the deployment")
-    parser.add_argument("--cpus", default="0.2", help="num of cpus for this deployment")
-    parser.add_argument(
-        "--replicas", default="1", help="num of replicas for this deployment"
-    )
-    args = parser.parse_args()
+    args = entry()
 
     if args.func == "deploy":
-        deploy_model(args.cpus, args.replicas, args.model)
+        deploy_model(
+            num_cpus=args.cpus, num_replicas=args.replicas, model_path=args.model
+        )
     elif args.func == "undeploy":
-        undeploy_model(args.model)
+        undeploy_model(model_path=args.model)
