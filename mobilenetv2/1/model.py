@@ -148,7 +148,7 @@ def undeploy_model(model_name: str):
 
 
 if __name__ == "__main__":
-    func, model_config = entry()
+    func, model_config = entry("model.onnx")
 
     if func == "deploy":
         deploy_model(model_config=model_config)
