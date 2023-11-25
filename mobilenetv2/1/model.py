@@ -147,7 +147,7 @@ if __name__ == "__main__":
 
     ray.init(address=model_config.ray_addr)
 
-    model_config.ray_actor_options["num_cpus"] = 1
+    model_config.ray_actor_options["num_cpus"] = 0.4
     model_config.ray_actor_options["num_gpus"] = 0.1
 
     if func == "deploy":
