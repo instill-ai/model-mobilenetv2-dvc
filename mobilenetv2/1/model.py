@@ -55,12 +55,6 @@ class MobileNet:
             categories.append(label.strip())
         return categories
 
-    def process_model_outputs(self, output: np.array):
-        probabilities = torch.nn.functional.softmax(torch.from_numpy(output), dim=0)
-        prob, catid = torch.topk(probabilities, 1)
-
-        return catid, prob
-
     def ModelMetadata(self, req: ModelMetadataRequest) -> ModelMetadataResponse:
         resp = ModelMetadataResponse(
             name=req.name,
@@ -103,7 +97,7 @@ class MobileNet:
         # shape=(1, batch_size, 1000)
 
         # tensor([[207], [294]]), tensor([[0.7107], [0.7309]])
-        cat, score = self.process_model_outputs(out[0])
+        score, cat = torch.topk(torch.from_numpy(out[0]), 1)
         s_out = [
             bytes(f"{score[i][0]}:{self.categories[cat[i]]}", "utf-8")
             for i in range(cat.size(0))
