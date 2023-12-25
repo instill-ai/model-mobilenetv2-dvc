@@ -113,6 +113,7 @@ class MobileNet:
             raw_output_contents=out,
         )
 
-deployable = InstillDeployable(MobileNet, "model.onnx")
-deployable.update_num_cpus(0.4)
-deployable.update_num_gpus(0.5)
+
+deployable = InstillDeployable(MobileNet, "model.onnx", True)
+deployable.update_max_replicas(8)
+deployable.update_min_replicas(0)
