@@ -114,4 +114,4 @@ class MobileNet:
         )
 
 
-deployable = InstillDeployable(MobileNet, "model.onnx")
+deployable = InstillDeployable(MobileNet, "model.onnx", False)
