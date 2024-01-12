@@ -10,13 +10,10 @@ from PIL import Image
 from instill.helpers.const import DataType
 from instill.helpers.ray_io import serialize_byte_tensor, deserialize_bytes_tensor
 from instill.helpers.ray_config import instill_deployment, InstillDeployable
-
-from ray_pb2 import (
-    ModelMetadataRequest,
-    ModelMetadataResponse,
-    RayServiceCallRequest,
-    RayServiceCallResponse,
-    InferTensor,
+from instill.helpers import (
+    construct_infer_response,
+    construct_metadata_response,
+    Metadata,
 )
 
 
@@ -48,29 +45,28 @@ class MobileNet:
             categories.append(label.strip())
         return categories
 
-    def ModelMetadata(self, req: ModelMetadataRequest) -> ModelMetadataResponse:
-        resp = ModelMetadataResponse(
-            name=req.name,
-            versions=req.version,
-            framework="onnx",
+    def ModelMetadata(self, req):
+        resp = construct_metadata_response(
+            req=req,
             inputs=[
-                ModelMetadataResponse.TensorMetadata(
+                Metadata(
                     name="input",
                     datatype=str(DataType.TYPE_STRING.name),
                     shape=[1],
                 ),
             ],
             outputs=[
-                ModelMetadataResponse.TensorMetadata(
+                Metadata(
                     name="output",
+                    datatype=str(DataType.TYPE_STRING.name),
                     shape=[1000],
                 ),
             ],
         )
         return resp
 
-    async def __call__(self, request: RayServiceCallRequest) -> RayServiceCallResponse:
-        b_tensors = request.raw_input_contents[0]
+    async def __call__(self, req):
+        b_tensors = req.raw_input_contents[0]
 
         input_tensors = deserialize_bytes_tensor(b_tensors)
 
@@ -95,16 +91,16 @@ class MobileNet:
         out = serialize_byte_tensor(np.asarray(s_out))
         out = np.expand_dims(out, axis=0)
 
-        return RayServiceCallResponse(
-            model_name=request.model_name,
-            model_version=request.model_version,
+        return construct_infer_response(
+            req=req,
             outputs=[
-                InferTensor(
+                Metadata(
                     name="output",
+                    datatype=str(DataType.TYPE_STRING.name),
                     shape=[len(batch_out), 1000],
-                ),
+                )
             ],
-            raw_output_contents=out,
+            raw_outputs=out,
         )
 
 
